@@ -19,7 +19,7 @@ fn main() {
     if let Some(path) = args.script {
         let lox = Lox::new_file(&path).unwrap();
     } else {
-        let lox = Lox::new_prompt();
+        let mut lox = Lox::new_prompt();
         match lox.start() {
             Ok(_) => (),
             Err(lox::LoxError::ReadError(ReadlineError::Interrupted | ReadlineError::Eof)) => (),

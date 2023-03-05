@@ -1,7 +1,5 @@
 use std::{cmp::min, marker::PhantomData};
 
-use crate::lox::TokenType;
-
 #[derive(Clone)]
 pub struct SourceTraverser<TokenType, ErrorType> {
     source: Vec<char>,
@@ -9,18 +7,18 @@ pub struct SourceTraverser<TokenType, ErrorType> {
     current: usize,
     pub line: u64,
     pl1: PhantomData<TokenType>,
-    pl2: PhantomData<ErrorType>
+    pl2: PhantomData<ErrorType>,
 }
 
 impl<TokenType, ErrorType> SourceTraverser<TokenType, ErrorType> {
-    pub fn new(source: String) -> Self {
+    pub fn new(source: &str) -> Self {
         SourceTraverser {
             source: source.chars().collect(),
             current: 0,
             start: 0,
             line: 1,
             pl1: PhantomData,
-            pl2: PhantomData
+            pl2: PhantomData,
         }
     }
 
@@ -29,7 +27,7 @@ impl<TokenType, ErrorType> SourceTraverser<TokenType, ErrorType> {
     }
 
     pub fn next_peek(&self) -> Option<char> {
-        self.source.get(self.current + 1).as_deref().copied()
+        self.source.get(self.current).as_deref().copied()
     }
 
     pub fn reset(&mut self) {
@@ -76,10 +74,11 @@ impl<TokenType, ErrorType> Iterator for SourceTraverser<TokenType, ErrorType> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let ret = self.current_char();
         if !self.is_finished() {
             self.current += 1;
         }
-        self.current_char()
+        ret
     }
 }
 
@@ -104,7 +103,9 @@ impl<TokenType, ErrorType> Tokenizer for SourceTraverser<TokenType, ErrorType> {
         &self,
         tokenize: fn(Self) -> (Result<Self::TokenType, Self::ErrorType>, Self),
     ) -> Result<Self::TokenType, Self::ErrorType> {
-        tokenize(SourceTraverser::new(self.source.clone().iter().collect()))
+        tokenize(SourceTraverser::new(
+            self.source.to_owned().iter().collect::<String>().as_str(),
+        ))
         .0
     }
 
@@ -113,7 +114,14 @@ impl<TokenType, ErrorType> Tokenizer for SourceTraverser<TokenType, ErrorType> {
         tokenize: fn(Self) -> (Result<Self::TokenType, Self::ErrorType>, Self),
     ) -> Result<Self::TokenType, Self::ErrorType> {
         self.start = self.current;
-        let (token, new_self) = tokenize(SourceTraverser::new(self.source.clone().iter().collect()));
+        let (token, new_self) = tokenize(Self {
+            source: self.source.clone(),
+            start: self.start,
+            current: self.current,
+            line: self.line,
+            pl1: PhantomData,
+            pl2: PhantomData,
+        });
         *self = new_self;
         return token;
     }

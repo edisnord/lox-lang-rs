@@ -1,6 +1,14 @@
+use log::info;
 use rustyline::error::ReadlineError;
 pub use scanner::TokenType;
-use std::{fmt::Display, fs::File, io::Read, path::Path};
+use std::{
+    fmt::Display,
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
+
+use self::scanner::Token;
 
 enum RunningMode {
     File(String),
@@ -8,6 +16,7 @@ enum RunningMode {
 }
 pub struct Lox {
     mode: RunningMode,
+    scanner: scanner::Scanner,
 }
 
 impl Lox {
@@ -15,20 +24,55 @@ impl Lox {
         let mut source = String::new();
         File::open(Path::new(path)).and_then(|mut file| file.read_to_string(&mut source))?;
         Ok(Lox {
-            mode: (RunningMode::File(source)),
+            mode: (RunningMode::File(source.clone())),
+            scanner: scanner::Scanner::new(source),
         })
     }
 
     pub fn new_prompt() -> Self {
         Lox {
             mode: RunningMode::REPL,
+            scanner: scanner::Scanner::new(String::new()),
         }
     }
 
-    pub fn start(&self) -> Result<(), LoxError> {
+    pub fn start(&mut self) -> Result<(), LoxError> {
+        let mut log_file = File::create("log.txt").unwrap();
         match &self.mode {
             RunningMode::File(source) => Ok(()),
-            RunningMode::REPL => Ok(()),
+            RunningMode::REPL => {
+                let mut rl = rustyline::DefaultEditor::new().unwrap();
+                loop {
+                    match rl.readline("> ") {
+                        Ok(line) => {
+                            if line.is_empty() {
+                                continue;
+                            }
+                            let line = line + "\n";
+                            log_file
+                                .write_all(
+                                    format!(
+                                        "{:?}",
+                                        self.scanner
+                                            .scan_line(line)
+                                            .unwrap()
+                                            .into_iter()
+                                            .filter(|tok| match tok.typ {
+                                                TokenType::EOF
+                                                | TokenType::WhiteSpace
+                                                | TokenType::NewLine => false,
+                                                _ => true,
+                                            })
+                                            .collect::<Vec<&Token>>()
+                                    )
+                                    .as_bytes(),
+                                )
+                                .unwrap();
+                        }
+                        Err(e) => break Err(LoxError::ReadError(e)),
+                    }
+                }
+            }
         }
     }
 
@@ -62,44 +106,49 @@ mod scanner {
 
     use crate::utils::{SourceTraverser, Tokenizer};
 
-    struct Scanner {
+    pub struct Scanner {
         source: LoxSourceTraverser,
         tokens: Vec<Token>,
-        start: usize,
-        current: usize,
-        line: u64,
     }
 
     impl Scanner {
         pub fn new(source: String) -> Self {
             Scanner {
-                source: SourceTraverser::new(source),
+                source: SourceTraverser::new(&source),
                 tokens: vec![],
-                start: 0,
-                current: 0,
-                line: 1,
             }
+        }
+
+        pub fn scan_line(&mut self, line: String) -> Result<&Vec<Token>, ScannerError> {
+            self.source = SourceTraverser::new(&line);
+            self.tokens = vec![];
+            let tokens = self.scan_tokens();
+            return tokens;
         }
 
         pub fn scan_tokens(&mut self) -> Result<&Vec<Token>, ScannerError> {
             while !self.source.is_finished() {
-                self.tokens.push(match self.source.get_next_token(scan_token) {
-                    Ok(token_type) => Token::new(token_type, self.source.get_lexeme(), self.source.line),
-                    Err(e) => return Err(e)
-                });
+                self.tokens
+                    .push(match self.source.get_next_token(scan_token) {
+                        Ok(token_type) => {
+                            Token::new(token_type, self.source.get_lexeme(), self.source.line)
+                        }
+                        Err(e) => return Err(e),
+                    });
             }
 
             self.tokens
-                .push(Token::new(TokenType::EOF, "".to_owned(), self.line));
+                .push(Token::new(TokenType::EOF, "".to_owned(), self.source.line));
+            self.source = SourceTraverser::new("");
             return Ok(&self.tokens);
         }
 
         fn is_finished(&self) -> bool {
             self.source.next_peek().is_none()
         }
-
     }
 
+    #[derive(Debug)]
     pub enum TokenType {
         WhiteSpace,
         NewLine,
@@ -151,11 +200,12 @@ mod scanner {
         EOF,
     }
 
-    struct Token {
-        typ: TokenType,
-        lexeme: String,
+    #[derive(Debug)]
+    pub struct Token {
+        pub typ: TokenType,
+        pub lexeme: String,
         // literal: Any ??,
-        line: u64,
+        pub line: u64,
     }
 
     impl Token {
@@ -187,10 +237,24 @@ mod scanner {
         source: LoxSourceTraverser,
     ) -> (Result<TokenType, ScannerError>, LoxSourceTraverser) {
         let mut source = source;
-        let curr_char = match source.next_peek() {
+        let curr_char = match source.next() {
             Some(next) => next,
             None => return (Ok(TokenType::EOF), source),
         };
+
+        let mut matches_next = |to_match: char, next_type: TokenType, notmatch_type: TokenType| {
+            if let Some(next) = &mut source.next_peek() {
+                if *next == to_match {
+                    let _ = &mut source.next();
+                    next_type
+                } else {
+                    notmatch_type
+                }
+            } else {
+                notmatch_type
+            }
+        };
+
         match curr_char {
             '(' => (Ok(TokenType::LeftParen), source),
             ')' => (Ok(TokenType::RightParen), source),
@@ -201,57 +265,40 @@ mod scanner {
             '+' => (Ok(TokenType::Plus), source),
             ';' => (Ok(TokenType::Semicolon), source),
             '*' => (Ok(TokenType::Star), source),
-            '!' => (Ok(
-                if source.next_peek().unwrap() == '=' {
-                    source.next();
-                    TokenType::BangEqual
-                } else {
-                    TokenType::Bang
-                }),
+            '!' => (
+                Ok(matches_next('=', TokenType::BangEqual, TokenType::Bang)),
                 source,
             ),
-            '=' => (Ok(
-                if source.next_peek().unwrap() == '=' {
-                    source.next();
-                    TokenType::EqualEqual
-                } else {
-                    TokenType::Equal
-                }),
+            '=' => (
+                Ok(matches_next('=', TokenType::EqualEqual, TokenType::Equal)),
                 source,
             ),
-            '<' => (Ok(
-                if source.next_peek().unwrap() == '=' {
-                    source.next();
-                    TokenType::LessEqual
-                } else {
-                    TokenType::Less
-                }),
-                source
-            ),
-            '>' => (Ok(
-                if source.next_peek().unwrap() == '=' {
-                    source.next();
-                    TokenType::GreaterEqual
-                } else {
-                    TokenType::Greater
-                }),
+            '<' => (
+                Ok(matches_next('=', TokenType::LessEqual, TokenType::Less)),
                 source,
             ),
-            '/' => (Ok(if source.next_peek().unwrap() == '/' {
-                source.next();
-                loop {
-                    if let Some(next) = source.next_peek() {
-                        if next == '\n' {
+            '>' => (
+                Ok(matches_next('=', TokenType::GreaterEqual, TokenType::Greater)),
+                source,
+            ),
+            '/' => (
+                Ok(if source.next_peek().unwrap() == '/' {
+                    source.next();
+                    loop {
+                        if let Some(next) = source.next_peek() {
+                            if next == '\n' {
+                                break TokenType::WhiteSpace;
+                            }
+                            source.next();
+                        } else {
                             break TokenType::WhiteSpace;
                         }
-                        source.next();
-                    } else {
-                        break TokenType::EOF;
                     }
-                }
-            } else {
-                TokenType::Slash
-            }), source),
+                } else {
+                    TokenType::Slash
+                }),
+                source,
+            ),
             ' ' | '\r' | '\t' => {
                 loop {
                     if let Some(next) = source.next_peek() {
@@ -269,27 +316,32 @@ mod scanner {
                 source.line += 1;
                 (Ok(TokenType::NewLine), source)
             }
-            '"' => (Ok({
-                loop {
-                    if let Some(next) = source.next_peek() {
-                        if next != '"' {
-                            source.next();
+            '"' => (
+                Ok({
+                    loop {
+                        if let Some(next) = source.next_peek() {
+                            if next != '"' {
+                                source.next();
+                            } else {
+                                let ret = TokenType::StringLiteral(source.get_lexeme());
+                                source.next();
+                                break ret;
+                            }
                         } else {
-                            let ret = TokenType::StringLiteral(source.get_lexeme());
-                            source.next();
-                            break ret;
+                            break TokenType::EOF;
                         }
-                    } else {
-                        break TokenType::EOF;
                     }
-                }
-            }), source)
-        ,
-            _ => (Err(ScannerError {
-                line: source.line,
-                location: source.get_lexeme(),
-                message: "Unexpected Character.".to_owned(),
-            }), source)
+                }),
+                source,
+            ),
+            _ => (
+                Err(ScannerError {
+                    line: source.line,
+                    location: source.get_lexeme(),
+                    message: "Unexpected Character.".to_owned(),
+                }),
+                source,
+            ),
         }
     }
 }
