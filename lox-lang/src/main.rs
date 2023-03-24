@@ -39,8 +39,8 @@ mod tests {
     ast_gen!();
 
     #[test]
-    fn koqeziu() {
-        Loqe::Loqe1(12);
+    fn aaaugh() {
+        Asdf::Asdf1(12);
     }
 }
 

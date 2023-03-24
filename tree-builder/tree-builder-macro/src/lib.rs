@@ -11,7 +11,7 @@ type TokenStream2 = quote::__private::TokenStream;
 pub fn ast_gen(_input: TokenStream) -> TokenStream {
     let item1 = ast_gen1();
     let item2 = ast_gen2();
-    let ident = format_ident!("{}", "Loqe");
+    let ident = format_ident!("{}", "Asdf");
     quote! {
         enum #ident {
             #item1
@@ -72,7 +72,7 @@ mod parser_generation{
 }
 
 fn ast_gen1() -> TokenStream2 {
-    let item1 = format_ident!("{}", "Loqe1");
+    let item1 = format_ident!("{}", "Asdf1");
     quote! {
         #item1(i32),
     }
@@ -80,7 +80,7 @@ fn ast_gen1() -> TokenStream2 {
 
 fn ast_gen2() -> TokenStream2 {
     quote! {
-        Loqe2(i32),
+        Asdf2(i32),
     }
     .into()
 }
