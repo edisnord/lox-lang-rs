@@ -1,8 +1,11 @@
+#![feature(trace_macros)]
+
 use clap::{command, Parser};
 use rustyline::error::ReadlineError;
 use lox::Lox;
 
 mod lox;
+mod scanner;
 mod utils;
 
 /// Lox implementation in Rust
@@ -29,3 +32,15 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tree_builder::ast_gen;
+    ast_gen!();
+
+    #[test]
+    fn koqeziu() {
+        Loqe::Loqe1(12);
+    }
+}
+

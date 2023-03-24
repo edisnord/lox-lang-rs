@@ -1,0 +1,4 @@
+
+[Token { typ: Identifier, lexeme: "koqe", line: 1 }]
+[Token { typ: Identifier, lexeme: "koqe", line: 1 }, Token { typ: Identifier, lexeme: "koqe2", line: 1 }]
+[Token { typ: Identifier, lexeme: "koqe", line: 1 }, Token { typ: Identifier, lexeme: "koqe2", line: 1 }, Token { typ: Identifier, lexeme: "loqe69", line: 1 }]
