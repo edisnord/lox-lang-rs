@@ -314,8 +314,8 @@ mod tests {
 
     #[test]
     fn test_terminal() {
-        let (_, output) = terminal(r#""kari""#).unwrap();
-        assert_eq!(output.0, "kari".to_owned());
+        let (_, output) = terminal(r#""aaa""#).unwrap();
+        assert_eq!(output.0, "aaa".to_owned());
     }
 
     #[test]
