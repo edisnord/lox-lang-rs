@@ -33,14 +33,4 @@ fn main() {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use tree_builder::ast_gen;
-    ast_gen!();
-
-    #[test]
-    fn aaaugh() {
-        Asdf::Asdf1(12);
-    }
-}
 
